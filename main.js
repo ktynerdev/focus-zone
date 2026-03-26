@@ -25,7 +25,13 @@ function resizeCanvas() {
   canvas.height = window.innerHeight;
 }
 resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  initStarsBg();
+  if (!gameStarted) {
+    resetRoundState();
+  }
+});
 
 let gameStarted = false;
 let gamePaused = false;
@@ -35,7 +41,7 @@ let round = 1;
 let score = 0;
 let timeLeft = 30;
 let zoneRadius = 140;
-let zoneShrinkRate = 0.09;
+let zoneShrinkRate = 0.12;
 let currentRule = "star";
 let switchedThisRound = false;
 
@@ -57,7 +63,7 @@ const player = {
   x: 0,
   y: 0,
   r: 16,
-  speed: 3.6,
+  speed: 3.0,
   tint: "#7dd3fc"
 };
 
@@ -97,6 +103,10 @@ function randomBetween(min, max) {
   return Math.random() * (max - min) + min;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function updateHud() {
   roundPill.textContent = `Round ${round}`;
   rulePill.textContent = currentRule === "star" ? "Collect Stars" : "Collect Circles";
@@ -112,12 +122,42 @@ function setZoneStatus(text) {
   zonePill.textContent = text;
 }
 
+/*
+  Complexity changes one parameter at a time:
+  R1: base game
+  R2: faster zone shrink only
+  R3: rule switch only added
+  R4: correct targets move
+  R5: correct targets move faster
+  R6: incorrect targets move
+  R7+: incorrect targets move faster
+*/
 function getAdaptiveSettings() {
+  let targetCount = 6;
+  let shrinkRate = 0.12;
+  let allowSwitch = false;
+  let duration = 30;
+  let correctMoveSpeed = 0;
+  let wrongMoveSpeed = 0;
+
+  if (round >= 2) shrinkRate = 0.15;          // one change
+  if (round >= 3) allowSwitch = true;         // next change
+  if (round >= 4) correctMoveSpeed = 0.45;    // next change
+  if (round >= 5) correctMoveSpeed = 0.8;     // next change
+  if (round >= 6) wrongMoveSpeed = 0.35;      // next change
+  if (round >= 7) wrongMoveSpeed = 0.65;      // next change
+
+  if (round >= 8) duration = 28;
+  if (round >= 9) targetCount = 7;
+  if (round >= 10) duration = 26;
+
   return {
-    targetCount: Math.min(16, 6 + round),
-    shrinkRate: Math.min(0.22, 0.09 + (round - 1) * 0.012),
-    allowSwitch: round >= 2,
-    duration: Math.max(16, 30 - Math.floor((round - 1) / 2))
+    targetCount,
+    shrinkRate,
+    allowSwitch,
+    duration,
+    correctMoveSpeed,
+    wrongMoveSpeed
   };
 }
 
@@ -126,30 +166,70 @@ function spawnTargets(count) {
   const cx = centerX();
   const cy = centerY();
 
+  const settings = getAdaptiveSettings();
+  const startRadius = Math.max(120, zoneRadius - 80);
+
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const radius = randomBetween(45, Math.max(70, zoneRadius - 45));
+    const radius = randomBetween(60, startRadius);
     const x = cx + Math.cos(angle) * radius;
     const y = cy + Math.sin(angle) * radius;
+    const type = Math.random() > 0.5 ? "star" : "circle";
+
+    let speed = 0;
+    if (type === currentRule) speed = settings.correctMoveSpeed;
+    if (type !== currentRule) speed = settings.wrongMoveSpeed;
+
+    const moveAngle = Math.random() * Math.PI * 2;
 
     targets.push({
       x,
       y,
       r: 18,
-      type: Math.random() > 0.5 ? "star" : "circle",
-      pulse: Math.random() * Math.PI * 2
+      type,
+      pulse: Math.random() * Math.PI * 2,
+      vx: Math.cos(moveAngle) * speed,
+      vy: Math.sin(moveAngle) * speed
     });
   }
 
   if (!targets.some(t => t.type === currentRule)) {
     targets[0].type = currentRule;
+    const angle = Math.random() * Math.PI * 2;
+    targets[0].vx = Math.cos(angle) * settings.correctMoveSpeed;
+    targets[0].vy = Math.sin(angle) * settings.correctMoveSpeed;
+  }
+}
+
+function applyMovementProfiles() {
+  const settings = getAdaptiveSettings();
+
+  for (const t of targets) {
+    const speed = t.type === currentRule ? settings.correctMoveSpeed : settings.wrongMoveSpeed;
+    const mag = Math.sqrt(t.vx * t.vx + t.vy * t.vy);
+
+    if (speed === 0) {
+      t.vx = 0;
+      t.vy = 0;
+    } else if (mag === 0) {
+      const a = Math.random() * Math.PI * 2;
+      t.vx = Math.cos(a) * speed;
+      t.vy = Math.sin(a) * speed;
+    } else {
+      t.vx = (t.vx / mag) * speed;
+      t.vy = (t.vy / mag) * speed;
+    }
   }
 }
 
 function resetRoundState() {
   const settings = getAdaptiveSettings();
   timeLeft = settings.duration;
-  zoneRadius = Math.min(canvas.width, canvas.height) * 0.28;
+
+  // start at screen-sized play area, then shrink
+  const fullScreenRadius = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height) / 2;
+  zoneRadius = fullScreenRadius;
+
   zoneShrinkRate = settings.shrinkRate;
   currentRule = "star";
   switchedThisRound = false;
@@ -166,7 +246,7 @@ function resetRoundState() {
   spawnTargets(settings.targetCount);
   updateHud();
   setStatus("Get Ready");
-  setZoneStatus("Zone Stable");
+  setZoneStatus("Zone Full");
 }
 
 function startGame() {
@@ -213,7 +293,7 @@ pauseBtn.addEventListener("click", () => {
 
 let joystickActive = false;
 let joyVector = { x: 0, y: 0 };
-const joyMax = 35;
+const joyMax = 26; // reduced sensitivity
 
 function setJoystickFromClient(clientX, clientY) {
   const rect = joystickBase.getBoundingClientRect();
@@ -231,8 +311,9 @@ function setJoystickFromClient(clientX, clientY) {
     dy = (dy / dist) * joyMax;
   }
 
-  joyVector.x = dx / joyMax;
-  joyVector.y = dy / joyMax;
+  // soften joystick response
+  joyVector.x = (dx / joyMax) * 0.55;
+  joyVector.y = (dy / joyMax) * 0.55;
 
   joystickKnob.style.left = `${35 + dx}px`;
   joystickKnob.style.top = `${35 + dy}px`;
@@ -260,6 +341,51 @@ window.addEventListener("pointerup", () => {
 window.addEventListener("pointercancel", () => {
   joystickActive = false;
   resetJoystick();
+});
+
+// direct finger drag on play area
+let dragActive = false;
+let dragId = null;
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!gameStarted || !gameRunning || gamePaused) return;
+
+  // ignore touches on joystick area
+  const joyRect = joystickBase.getBoundingClientRect();
+  if (
+    e.clientX >= joyRect.left &&
+    e.clientX <= joyRect.right &&
+    e.clientY >= joyRect.top &&
+    e.clientY <= joyRect.bottom
+  ) {
+    return;
+  }
+
+  dragActive = true;
+  dragId = e.pointerId;
+  canvas.setPointerCapture(e.pointerId);
+  player.x = clamp(e.clientX, player.r, canvas.width - player.r);
+  player.y = clamp(e.clientY, player.r, canvas.height - player.r);
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!dragActive || e.pointerId !== dragId) return;
+  player.x = clamp(e.clientX, player.r, canvas.width - player.r);
+  player.y = clamp(e.clientY, player.r, canvas.height - player.r);
+});
+
+canvas.addEventListener("pointerup", (e) => {
+  if (e.pointerId === dragId) {
+    dragActive = false;
+    dragId = null;
+  }
+});
+
+canvas.addEventListener("pointercancel", (e) => {
+  if (e.pointerId === dragId) {
+    dragActive = false;
+    dragId = null;
+  }
 });
 
 function createBurst(x, y, color) {
@@ -297,9 +423,12 @@ function maybeSwitchRule() {
   if (!targets.some(t => t.type === currentRule)) {
     targets[0].type = currentRule;
   }
+  applyMovementProfiles();
 }
 
 function movePlayer() {
+  if (dragActive) return; // finger drag takes priority
+
   let moveX = 0;
   let moveY = 0;
 
@@ -317,11 +446,44 @@ function movePlayer() {
     moveY /= mag;
   }
 
-  player.x += moveX * player.speed * 3.2;
-  player.y += moveY * player.speed * 3.2;
+  player.x += moveX * player.speed * 3.0;
+  player.y += moveY * player.speed * 3.0;
 
-  player.x = Math.max(player.r, Math.min(canvas.width - player.r, player.x));
-  player.y = Math.max(player.r, Math.min(canvas.height - player.r, player.y));
+  player.x = clamp(player.x, player.r, canvas.width - player.r);
+  player.y = clamp(player.y, player.r, canvas.height - player.r);
+}
+
+function updateTargets() {
+  const cx = centerX();
+  const cy = centerY();
+
+  for (const t of targets) {
+    if (t.vx === 0 && t.vy === 0) continue;
+
+    t.x += t.vx;
+    t.y += t.vy;
+
+    // bounce off screen edges
+    if (t.x < t.r || t.x > canvas.width - t.r) t.vx *= -1;
+    if (t.y < t.r || t.y > canvas.height - t.r) t.vy *= -1;
+
+    t.x = clamp(t.x, t.r, canvas.width - t.r);
+    t.y = clamp(t.y, t.r, canvas.height - t.r);
+
+    // keep targets roughly within current zone after it gets smaller
+    const dx = t.x - cx;
+    const dy = t.y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > zoneRadius - 30 && dist > 0) {
+      const nx = dx / dist;
+      const ny = dy / dist;
+      t.x = cx + nx * (zoneRadius - 30);
+      t.y = cy + ny * (zoneRadius - 30);
+      t.vx *= -1;
+      t.vy *= -1;
+    }
+  }
 }
 
 function failRound(reason) {
@@ -362,7 +524,13 @@ function checkZone(deltaMs) {
       failRound("Zone lost");
     }
   } else {
-    setZoneStatus(zoneRadius < Math.min(canvas.width, canvas.height) * 0.15 ? "Critical" : "Zone Stable");
+    if (zoneRadius > Math.min(canvas.width, canvas.height) * 0.45) {
+      setZoneStatus("Zone Full");
+    } else if (zoneRadius < Math.min(canvas.width, canvas.height) * 0.15) {
+      setZoneStatus("Critical");
+    } else {
+      setZoneStatus("Zone Stable");
+    }
   }
 }
 
@@ -400,6 +568,7 @@ function updateGame(deltaMs) {
 
   roundStats.survivedMs += deltaMs;
   movePlayer();
+  updateTargets();
 
   zoneRadius -= zoneShrinkRate;
   if (zoneRadius < 48) {
