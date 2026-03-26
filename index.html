@@ -1,15 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Focus Zone</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <title>Focus Zone: Rule Runner</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-  <h1>Focus Zone</h1>
-  <p id="rule">Rule: Collect stars</p>
-  <canvas id="game"></canvas>
+  <div id="app">
+    <div id="gameWrap">
+      <canvas id="game"></canvas>
+
+      <div id="topHud">
+        <div class="pill" id="roundPill">Round 1</div>
+        <div class="pill highlight" id="rulePill">Collect Stars</div>
+        <div class="pill" id="scorePill">Score 0</div>
+      </div>
+
+      <div id="bottomHud">
+        <div class="pill" id="zonePill">Zone Stable</div>
+        <div class="pill" id="timePill">Time 30</div>
+        <div class="pill" id="statusPill">Get Ready</div>
+      </div>
+
+      <div id="startOverlay" class="overlay">
+        <div class="panel">
+          <div class="eyebrow">Focus Zone</div>
+          <h1>Rule Runner</h1>
+          <p class="subtitle">
+            Stay inside the shrinking zone. Collect the correct targets. Avoid the wrong ones.
+          </p>
+
+          <div class="instructionBox">
+            <div>Short rounds</div>
+            <div>Adaptive pressure</div>
+            <div>No weapons</div>
+            <div>Cognitive play under stress</div>
+          </div>
+
+          <button id="startBtn" class="actionBtn">Start Game</button>
+        </div>
+      </div>
+
+      <div id="summaryOverlay" class="overlay hidden">
+        <div class="panel">
+          <div class="eyebrow">Round Complete</div>
+          <h2 id="summaryTitle">Nice Work</h2>
+          <div id="summaryStats" class="summaryStats"></div>
+          <div class="summaryButtons">
+            <button id="nextRoundBtn" class="actionBtn">Next Round</button>
+            <button id="restartBtn" class="secondaryBtn">Restart</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="touchControls">
+      <div id="joystickBase">
+        <div id="joystickKnob"></div>
+      </div>
+
+      <div id="actionButtons">
+        <button class="touchBtn" id="pauseBtn">Pause</button>
+      </div>
+    </div>
+  </div>
 
   <script src="main.js"></script>
 </body>
