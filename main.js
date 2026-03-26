@@ -58,8 +58,6 @@ const player = {
   y: 0,
   r: 16,
   speed: 3.6,
-  dx: 0,
-  dy: 0,
   tint: "#7dd3fc"
 };
 
@@ -73,8 +71,6 @@ function centerY() {
 function resetPlayerPosition() {
   player.x = centerX();
   player.y = centerY();
-  player.dx = 0;
-  player.dy = 0;
 }
 
 function initStarsBg() {
@@ -117,15 +113,11 @@ function setZoneStatus(text) {
 }
 
 function getAdaptiveSettings() {
-  const baseTargetCount = Math.min(16, 6 + round);
-  const shrink = Math.min(0.22, 0.09 + (round - 1) * 0.012);
-  const ruleSwitch = round >= 2;
-  const duration = Math.max(16, 30 - Math.floor((round - 1) / 2));
   return {
-    targetCount: baseTargetCount,
-    shrinkRate: shrink,
-    allowSwitch: ruleSwitch,
-    duration
+    targetCount: Math.min(16, 6 + round),
+    shrinkRate: Math.min(0.22, 0.09 + (round - 1) * 0.012),
+    allowSwitch: round >= 2,
+    duration: Math.max(16, 30 - Math.floor((round - 1) / 2))
   };
 }
 
@@ -173,7 +165,7 @@ function resetRoundState() {
   resetPlayerPosition();
   spawnTargets(settings.targetCount);
   updateHud();
-  setStatus("Stay focused");
+  setStatus("Get Ready");
   setZoneStatus("Zone Stable");
 }
 
@@ -220,13 +212,12 @@ pauseBtn.addEventListener("click", () => {
 });
 
 let joystickActive = false;
-let joyCenter = { x: 60, y: 60 };
 let joyVector = { x: 0, y: 0 };
 const joyMax = 35;
 
 function setJoystickFromClient(clientX, clientY) {
   const rect = joystickBase.getBoundingClientRect();
-  joyCenter = {
+  const joyCenter = {
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2
   };
@@ -346,7 +337,7 @@ function completeRound(reason) {
 }
 
 function showSummary(title, reason) {
-  summaryTitle.textContent = `${title}`;
+  summaryTitle.textContent = title;
   const zoneCompliance = Math.max(0, 100 - Math.round(roundStats.zoneExitMs / 100));
   summaryStats.innerHTML = `
     <div><strong>Status:</strong> ${reason}</div>
@@ -371,11 +362,7 @@ function checkZone(deltaMs) {
       failRound("Zone lost");
     }
   } else {
-    if (zoneRadius < Math.min(canvas.width, canvas.height) * 0.15) {
-      setZoneStatus("Critical");
-    } else {
-      setZoneStatus("Zone Stable");
-    }
+    setZoneStatus(zoneRadius < Math.min(canvas.width, canvas.height) * 0.15 ? "Critical" : "Zone Stable");
   }
 }
 
